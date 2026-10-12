@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    # The skill targets Codex on Windows and this suite has only been verified
+    # there; do not add other runners until they have been checked somewhere.
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run the suite with the empty-run guard
+        # The reader-dependent tests skip here because the sibling context-gauge
+        # skill is not part of this repository; run_suite.py checks that enough
+        # tests actually executed instead of accepting a trivially green run.
+        run: python -I -B tests/run_suite.py
