@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "project_root": null,
+  "outgoing_session_id": null,
+  "owner_epoch": null,
+  "state_file": null,
+  "authorization_evidence_file": null,
+  "evidence_files": [],
+  "next_steps": [],
+  "open_tasks": [],
+  "active_runs": [],
+  "unknowns": []
+}
