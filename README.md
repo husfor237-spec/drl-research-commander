@@ -130,7 +130,9 @@ drl-research-commander/
 
 共 125 项：项目控制、决策账本、阈值配置、reader 接缝与技能文件完整性等测试在有/无 `context-gauge` 时都会运行；36 项上下文策略测试**需要真实 reader**，在新克隆（无 `context-gauge`）时以明确原因 **skip 而不是 fail**，因此 clone 后直接跑仍会得到有效结果（`OK (skipped=36)`），不安装依赖时不会出现假失败。全部使用临时项目、合成 JSONL 和惰性运行记录，不启动训练或创建聊天。验收与独立前向验证记录见 `tests/validation.md`。
 
-CI（`.github/workflows/tests.yml`）在 `windows-latest` 上用 Python 3.11 与 3.13 各跑一次；这两个版本已在开发机实测通过。
+CI（`.github/workflows/tests.yml`）在 `windows-latest` 上用 Python 3.11 与 3.13 各跑一次 `tests/run_suite.py`，并在 push、pull request 和手动触发时执行。本仓库当前 CI 状态：[![tests](https://github.com/husfor237-spec/drl-research-commander/actions/workflows/tests.yml/badge.svg)](https://github.com/husfor237-spec/drl-research-commander/actions/workflows/tests.yml)
+
+首次实跑（2026-10-12，run 38220542904）：两个版本均 `collected=125 executed=89 skipped=36 failures=0 errors=0`——36 项跳过者是依赖兄弟 `context-gauge` 的策略测试，CI 环境不带该依赖，属预期行为。
 
 ## 常见陷阱
 

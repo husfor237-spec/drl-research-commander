@@ -83,4 +83,14 @@ CLI 冒烟：非法阈值（prepare ≥ required）返回退出码 2 且不写�
 
 读取器接缝由 4 项替身 reader 测试固定：结构化遥测驱动决策、调用后模块级 `open` 已恢复、忽略注入的 reader 不被采信（`reader_ignored_structured_telemetry`）、接口缺关键字即拒绝。
 
-未执行项同 1.1.0；CI 尚未在 GitHub 上真实跑过，仅按本机同版本（3.11.9 / 3.13.12，Windows）实测推断通过。
+未执行项同 1.1.0。
+
+CI 补记：`.github/workflows/tests.yml` 起初因令牌缺少 `workflow` 权限被 GitHub 拒绝入仓，改用具备 `repo, workflow` 权限的令牌后推送成功（commit `dba2b33`），并已在 GitHub 上真实跑完一次：
+
+| 项 | 结果 |
+|---|---|
+| 触发方式 / run | `push`，run 38220542904，`conclusion: success` |
+| `suite (3.11)` | Ran 125 tests，OK (skipped=36)，collected=125 executed=89 skipped=36 failures=0 errors=0 |
+| `suite (3.13)` | 同上，逐字一致 |
+
+即本机预测（89 executed / 36 skipped）与 GitHub 实跑结果完全吻合，空跑守卫在真实 CI 中未触发"绿但空跑"。
