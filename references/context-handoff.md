@@ -4,17 +4,20 @@
 
 ## 显式绑定与读数
 
-使用可用的 Python 3.11+；脚本只依赖标准库。当前机器可用解释器为 `C:/Users/Administrator/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe`。其他安装位置先查实际解释器，不安装新运行时来“修正模型”。
+使用可用的 Python 3.11+；脚本只依赖标准库。用宿主实际可用的解释器，路径按本机实际情况填写，不安装新运行时来“修正模型”。
 
-PowerShell 示例（变量须填为真实 ID，不能执行未替换的占位符）：
+PowerShell 示例（变量须填为真实值和真实绝对路径，不能执行未替换的占位符）：
 
 ```powershell
-$researchPython = 'C:\Users\Administrator\.workbuddy-ai\binaries\python\versions\3.13.12\python.exe'
+$researchPython = '<本机实际Python绝对路径>'
+$researchSkill = '<本skill安装目录绝对路径>'
 $researchSessionId = '<当前角色真实会话ID>'
-& $researchPython -I -B 'C:\Users\Administrator\.codex\skills\drl-research-commander\scripts\context_policy.py' --session-id $researchSessionId
+& $researchPython -I -B "$researchSkill\scripts\context_policy.py" --session-id $researchSessionId
 ```
 
-默认定位兄弟 `context-gauge/scripts/context_gauge.py`，找不到时按实际 CODEX_HOME 定位；非标准位置用 `--gauge-path` 指定。只使用原 reader 的会话解析，不读取它的 60/75、8轮、能力/压力建议，不修改其文件或 hooks。现有其他 hook 仍可能按自己的策略提醒，本论文的决策以适配器为准。
+阈值默认为 80/90/2，可按项目需要追加 `--prepare-percent`、`--required-percent`、`--compaction-limit`（须保持 prepare < required、二者在 1–100 内、limit ≥ 1）。实际生效的阈值原样出现在输出的 `policy` 字段，须与 state 中登记的阈值一致。
+
+默认定位兄弟 `context-gauge/scripts/context_gauge.py`，找不到时按实际 CODEX_HOME 定位；非标准位置用 `--gauge-path` 指定。本 skill 依赖该 reader 存在，安装时须与它并列放置；reader 若缺失或不再提供本适配器使用的接口，脚本会明确报错并把轮换动作标为未知，不会静默给出错误的占用率。只使用原 reader 的会话解析，不读取它的 60/75、8轮、能力/压力建议，不修改其文件或 hooks。现有其他 hook 仍可能按自己的策略提醒，本论文的决策以适配器为准。
 
 每个角色使用自己的实际会话 ID：主帅从可靠会话上下文取得，代理 ID 由真实派发回执确认；不能在子代理中直接沿用父进程环境变量里的主帅 ID。需要指定 JSONL 时传 `--session`，元数据仍必须与 `--session-id` 完全一致。找不到指定会话不回退最近会话，绑定失败标未知。
 

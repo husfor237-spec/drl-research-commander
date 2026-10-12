@@ -1,8 +1,8 @@
 ---
 name: drl-research-commander
-description: "统筹 DRL 资源分配论文的文献调查、主线分析、环境与算法实验、独立审查和上下文轮换。用于论文实验的多阶段协作，采用主帅加临时子代理，禁止学习路径中的专家引导与人工策略偏置，允许纯可行性约束及有证据的弱创新。也用于按本协议执行角色任务或接任主帅；普通单文件编程不必启动整套流程。"
+description: "统筹 DRL 资源分配论文的文献调查、主线分析、环境与算法实验、独立审查和上下文轮换。用于论文实验的多阶段协作，采用主帅加临时子代理，禁止学习路径中的专家引导与人工策略偏置，允许纯可行性约束及有证据的弱创新。也用于按本协议执行角色任务或接任主帅；普通单文件编程不必启动整套流程。Keywords: DRL, deep reinforcement learning, resource allocation, task offloading, MEC, edge computing, Lyapunov drift, multi-agent RL, PPO, paper experiments, ablation study, reproducibility, literature survey, independent review, context handoff."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # DRL 论文实验主帅

@@ -1,6 +1,6 @@
 interface:
   display_name: "DRL 论文实验主帅"
-  short_description: "统筹资源分配论文的文献、实验、独立审查与主帅轮换，保存可复核记忆"
+  short_description: "统筹资源分配论文的文献、实验、独立审查与主帅轮换，保存可复核记忆 (DRL resource allocation paper experiments, reproducible runs, independent review)"
   default_prompt: "使用 $drl-research-commander 统筹我的 DRL 资源分配论文实验，在本项目内派发临时子代理，并在需要轮换时自动创建全新接任主帅聊天、发送交接信息。"
 policy:
   allow_implicit_invocation: true

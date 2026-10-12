@@ -2,6 +2,11 @@
 
 Run with the configured Python executable and -I -B. No telemetry reader is
 stubbed: the real sibling context-gauge parses each temporary JSONL fixture.
+
+This module therefore requires the sibling `context-gauge` skill to be installed
+next to this skill. When it is absent (for example in a fresh clone of this
+repository), every test here is skipped with an explicit reason instead of
+failing, so the suite still reports a meaningful result. See README "依赖".
 """
 
 import datetime
@@ -25,6 +30,8 @@ SID = "synthetic-commander"
 NOW_DT = datetime.datetime(2026, 10, 12, 8, tzinfo=datetime.timezone.utc)
 NOW = NOW_DT.timestamp()
 INVALID_MODEL_PAYLOADS = ({}, {"model": ""}, {"model": " \t\n"}, {"model": 17})
+GAUGE_MISSING_REASON = ("requires the sibling context-gauge skill at " + str(GAUGE) +
+                        "; install it next to this skill as the README describes")
 
 
 def load_policy():
@@ -60,6 +67,7 @@ def compaction(seconds=-4):
     return event("compacted", {"window_number": 2}, stamp(seconds))
 
 
+@unittest.skipUnless(GAUGE.is_file(), GAUGE_MISSING_REASON)
 class ContextPolicyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="drl-policy-test-")
@@ -72,7 +80,6 @@ class ContextPolicyTests(unittest.TestCase):
         self.environment.start()
         self.addCleanup(self.environment.stop)
         self.assertTrue(GAUGE.is_absolute())
-        self.assertTrue(GAUGE.is_file(), "the actual installed sibling gauge is required")
 
     def rows(self, used=790_000, window=1_000_000, model="gpt-6.1-sol"):
         return [event("session_meta", {"id": SID, "cwd": str(self.base)}, stamp(-12)),
@@ -454,6 +461,85 @@ class ContextPolicyTests(unittest.TestCase):
         self.assertEqual({str(p.relative_to(self.base)): p.read_bytes() for p in self.base.rglob("*") if p.is_file()}, tree_before)
         self.assertFalse(list(self.base.rglob("__pycache__")))
         self.assertEqual({str(p) for directory in (SOURCE.parent, GAUGE.parent) for p in directory.rglob("*.pyc")}, caches_before)
+
+
+class PolicyConfigurationTests(unittest.TestCase):
+    """Threshold configuration and reader-compatibility checks.
+
+    These do not call the installed gauge, so they run even in a fresh clone.
+    """
+
+    def test_defaults_match_the_documented_80_90_2_policy(self):
+        self.assertEqual(policy.normalize_policy(),
+                         {"prepare_fill_percent": 80, "required_fill_percent": 90,
+                          "compaction_limit": 2, "policy_is_heuristic": True})
+
+    def test_overrides_are_applied_and_stay_marked_heuristic(self):
+        merged = policy.normalize_policy({"prepare_fill_percent": 70,
+                                          "required_fill_percent": 85,
+                                          "compaction_limit": 3})
+        self.assertEqual(merged["prepare_fill_percent"], 70)
+        self.assertEqual(merged["required_fill_percent"], 85)
+        self.assertEqual(merged["compaction_limit"], 3)
+        self.assertIs(merged["policy_is_heuristic"], True)
+
+    def test_thresholds_must_be_ordered(self):
+        for bad in ({"prepare_fill_percent": 90, "required_fill_percent": 90},
+                    {"prepare_fill_percent": 95, "required_fill_percent": 90}):
+            with self.assertRaises(ValueError):
+                policy.normalize_policy(bad)
+
+    def test_thresholds_and_limit_must_stay_in_range(self):
+        for bad in ({"prepare_fill_percent": 0}, {"prepare_fill_percent": 101},
+                    {"required_fill_percent": -1}, {"required_fill_percent": "90"},
+                    {"compaction_limit": 0}, {"compaction_limit": 1.5}):
+            with self.assertRaises(ValueError, msg=str(bad)):
+                policy.normalize_policy(bad)
+
+    def test_cli_rejects_invalid_thresholds_before_touching_telemetry(self):
+        with tempfile.TemporaryDirectory(prefix="drl-policy-cli-") as base:
+            result = subprocess.run([str(PYTHON), "-I", "-B", str(SOURCE),
+                                     "--session-id", SID, "--prepare-percent", "95",
+                                     "--required-percent", "90"],
+                                    cwd=base, capture_output=True, text=True,
+                                    encoding="utf-8", timeout=20)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertFalse(json.loads(result.stdout)["ok"])
+            self.assertEqual(list(Path(base).iterdir()), [])
+
+    def test_reader_missing_a_used_keyword_is_rejected(self):
+        class Reader:
+            @staticmethod
+            def find_session(session_id=None, path=None):  # prefer_recent dropped
+                return None
+
+            @staticmethod
+            def scan_session(path, max_history=40):
+                return {}
+
+            @staticmethod
+            def snapshot_status(st, now=None):
+                return {}
+
+        with self.assertRaises(ValueError) as caught:
+            policy.check_gauge_interface(Reader)
+        self.assertIn("prefer_recent", str(caught.exception))
+
+    def test_reader_accepting_kwargs_is_tolerated(self):
+        class Reader:
+            @staticmethod
+            def find_session(**kwargs):
+                return None
+
+            @staticmethod
+            def scan_session(path, **kwargs):
+                return {}
+
+            @staticmethod
+            def snapshot_status(st, **kwargs):
+                return {}
+
+        policy.check_gauge_interface(Reader)  # must not raise
 
 
 if __name__ == "__main__":

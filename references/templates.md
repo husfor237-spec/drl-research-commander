@@ -29,6 +29,18 @@
 
 决策账本每行一个 JSON 对象：`id`、`timestamp`、`stage`、`spec_version`、`decision`、`reason`、`evidence`（绝对路径/原文位置）、`affected_runs`、`revalidation`。否决方案也登记，避免轮换后重新尝试同一条无依据的路径。
 
+## 决策账本接口
+
+用 `scripts/record_decision.py` 追加与校验，不手工拼接 JSONL：
+
+```powershell
+& $researchPython -I -B "$researchSkill\scripts\record_decision.py" --project <论文项目绝对路径> `
+  --stage G5 --spec-version <规格版本> --decision '<决定了什么>' --reason '<依据与已否决的选项>' `
+  --evidence <产物绝对路径或原文位置> --revalidation '<需重跑或复核的内容>'
+```
+
+`--id`/`--timestamp` 省略时自动生成；`--evidence` 至少一条；`--affected-run` 可重复也可为空；`--check-only` 只校验既有账本（含重复 ID、非 JSON 行、缺字段），不写入。工具只追加 `decisions.jsonl`，不改 `state.md`、`control.json` 或既有行。`stage` 不是 G0–G9 时给出警告但仍然记录。
+
 ## 运行记录接口
 
 `project_control.py claim-run --record` 至少要求 `run_id`、存在的绝对 `config_path`、非空 `command` 参数列表、现存绝对 `working_directory`、绝对 `log_path`。其余科学复现字段必须由执行任务书补齐，控制工具不替代实验闸门。

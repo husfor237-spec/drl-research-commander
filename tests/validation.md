@@ -2,6 +2,8 @@
 
 日期：2026-10-12（Asia/Shanghai）。skill 版本：1.0.0。
 
+> 版本 1.1.0 的核查补充在文末“修订 1.1.0”一节；上文 1.0.0 记录按其原始日期保留，不覆盖。
+
 ## 格式与发现
 
 - skill-creator 的 `quick_validate.py` 校验通过；界面 YAML、模板 JSON、Python 语法及本地引用已核验。
@@ -37,3 +39,24 @@
 ## 验证范围
 
 已验证文档行为、读取适配器、文件交接状态机、运行登记及宿主技能发现。未执行真实聊天创建/消息/跨聊天激活、真实子代理会话绑定或训练进程恢复；自动轮换依赖目标宿主的实际工具与具体项目的直接用户授权。没有开展真实论文实验，也不把模拟验收当作论文结果。
+
+## 修订 1.1.0（同日）
+
+改动范围：
+
+- `scripts/context_policy.py`：阈值参数化（`--prepare-percent`/`--required-percent`/`--compaction-limit`，默认仍为 80/90/2 且输出逐字不变）；reader 接口显式校验（缺失或不再接受所用关键字即明确报错，不再静默漂移）。
+- 新增 `scripts/record_decision.py`：`decisions.jsonl` 的追加与校验（`--check-only` 只校验不写入）。
+- `tests/test_context_policy.py`：缺兄弟 `context-gauge` 时整类 skip 并给出原因，不再 fail；新增不依赖 reader 的阈值配置与接口兼容性测试。
+- 新增 `tests/test_record_decision.py`。
+- 文档：`references/context-handoff.md` 与 `templates.md` 去掉机器专属绝对路径并补新接口；README 补充依赖与正确的 discover 命令；新增 LICENSE（MIT）；description 补英文关键词。
+
+实测（`python -I -B -m unittest discover -s tests -q`）：
+
+| 环境 | 结果 |
+|---|---|
+| 仓库副本（无兄弟 `context-gauge`） | Ran 112 tests，OK (skipped=36) |
+| 安装位置（有兄弟 reader） | Ran 112 tests，OK（0 skipped，0 failed） |
+
+CLI 冒烟：非法阈值（prepare ≥ required）返回退出码 2 且不写文件；自定义阈值原样出现在 `policy` 字段；决策账本端到端追加一条合法记录，`--check-only` 校验通过。
+
+验证范围仍同 1.0.0：未执行真实聊天创建/跨聊天激活、真实子代理会话绑定或训练恢复；没有开展真实论文实验，不把本记录当作论文结果。

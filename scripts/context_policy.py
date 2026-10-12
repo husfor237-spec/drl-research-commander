@@ -8,6 +8,7 @@ capability estimates. Never writes session files, configuration, hooks or panels
 import argparse
 import datetime
 import importlib.util
+import inspect
 import io
 import json
 import os
@@ -19,6 +20,12 @@ import sys
 POLICY = {"prepare_fill_percent": 80, "required_fill_percent": 90,
           "compaction_limit": 2, "policy_is_heuristic": True}
 SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
+# Keyword arguments this adapter uses from the installed reader. A reader that
+# drops or renames them is incompatible, and failing loudly beats silently
+# returning the wrong occupation ratio.
+GAUGE_INTERFACE = {"find_session": ("session_id", "path", "prefer_recent"),
+                   "scan_session": ("path",),
+                   "snapshot_status": ("st", "now")}
 
 
 def default_gauge_path():
@@ -27,6 +34,25 @@ def default_gauge_path():
         return sibling
     root = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
     return root / "skills/context-gauge/scripts/context_gauge.py"
+
+
+def check_gauge_interface(module):
+    """Verify the reader still exposes the exact interface this adapter calls."""
+    for name, expected in GAUGE_INTERFACE.items():
+        function = getattr(module, name, None)
+        if not callable(function):
+            raise ValueError("incompatible context-gauge reader: missing " + name)
+        parameters = None
+        try:
+            parameters = inspect.signature(function).parameters
+        except (TypeError, ValueError):
+            raise ValueError("incompatible context-gauge reader: cannot inspect " + name) from None
+        if any(item.kind is inspect.Parameter.VAR_KEYWORD for item in parameters.values()):
+            continue  # accepts anything by keyword; the call sites remain safe
+        missing = [key for key in expected if key not in parameters]
+        if missing:
+            raise ValueError("incompatible context-gauge reader: " + name +
+                             " no longer accepts " + ", ".join(missing))
 
 
 def load_gauge(path):
@@ -43,9 +69,7 @@ def load_gauge(path):
         spec.loader.exec_module(module)
     finally:
         sys.dont_write_bytecode = previous
-    for name in ("find_session", "scan_session", "snapshot_status"):
-        if not callable(getattr(module, name, None)):
-            raise ValueError("incompatible context-gauge reader: missing " + name)
+    check_gauge_interface(module)
     return module
 
 
@@ -128,21 +152,44 @@ def audit_boundaries(path):
     return result
 
 
-def empty_report(session_id, reason):
+def normalize_policy(policy=None):
+    """Return a validated copy of the 80/90/2 defaults, or of a caller override.
+
+    The thresholds are a workflow choice, so they are configurable; they are
+    never model capability estimates and must stay ordered and in range.
+    """
+    merged = dict(POLICY)
+    if policy:
+        merged.update(policy)
+    for key in ("prepare_fill_percent", "required_fill_percent"):
+        value = merged[key]
+        if type(value) is not int or not 1 <= value <= 100:
+            raise ValueError(key + " must be an integer between 1 and 100")
+    if merged["prepare_fill_percent"] >= merged["required_fill_percent"]:
+        raise ValueError("prepare threshold must be below the required threshold")
+    limit = merged["compaction_limit"]
+    if type(limit) is not int or limit < 1:
+        raise ValueError("compaction_limit must be a positive integer")
+    merged["policy_is_heuristic"] = True
+    return merged
+
+
+def empty_report(session_id, reason, policy):
     return {"schema_version": "1.0", "ok": False, "binding_verified": False,
             "bound_by": "explicit", "requested_session_id": session_id,
             "session_id": None, "model": None, "used_tokens": None,
             "context_window": None, "window_source": "unknown", "fill_percent": None,
             "compactions": None, "snapshot_status": "unavailable",
-            "revalidate_after_compaction": False, "policy": dict(POLICY),
+            "revalidate_after_compaction": False, "policy": policy,
             "rotation": {"action": "unknown", "reasons": [reason]},
             "usage_timestamp": None, "latest_turn_timestamp": None,
             "last_compaction_timestamp": None,
             "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
 
 
-def read_policy(session_id, session=None, gauge_path=None, now=None):
-    report = empty_report(session_id, "telemetry_unavailable")
+def read_policy(session_id, session=None, gauge_path=None, now=None, policy=None):
+    policy = normalize_policy(policy)
+    report = empty_report(session_id, "telemetry_unavailable", policy)
     if not isinstance(session_id, str) or not SESSION_ID.fullmatch(session_id):
         report["rotation"]["reasons"] = ["invalid_session_id"]
         return report
@@ -228,20 +275,23 @@ def read_policy(session_id, session=None, gauge_path=None, now=None):
     if measured:
         used, window = report["used_tokens"], report["context_window"]
         report["fill_percent"] = used * 100 / window
-        if used * 100 >= window * POLICY["required_fill_percent"]:
+        if used * 100 >= window * policy["required_fill_percent"]:
             action = "required"
-            reasons.append("context_at_or_above_90_percent")
-        elif used * 100 >= window * POLICY["prepare_fill_percent"]:
+            reasons.append("context_at_or_above_%d_percent" % policy["required_fill_percent"])
+        elif used * 100 >= window * policy["prepare_fill_percent"]:
             action = "prepare"
-            reasons.append("context_at_or_above_80_percent")
+            reasons.append("context_at_or_above_%d_percent" % policy["prepare_fill_percent"])
     else:
         if report["context_window"] is None:
             reasons.append("no_measured_window_for_usage_snapshot")
         if not audit["model"]:
             reasons.append("model_identity_unknown")
-    if audit["compactions"] >= POLICY["compaction_limit"]:
+    if audit["compactions"] >= policy["compaction_limit"]:
         action = "required"
-        reasons.append("second_compaction_requires_handoff")
+        # Keep the historical default wording byte-identical; describe the rule
+        # by its number only when the caller changed the limit.
+        reasons.append("second_compaction_requires_handoff" if policy["compaction_limit"] == 2
+                       else "compaction_limit_requires_handoff")
     report["rotation"] = {"action": action, "reasons": reasons}
     return report
 
@@ -251,12 +301,26 @@ def main(argv=None):
     parser.add_argument("--session-id", required=True, help="This role's actual Codex session ID")
     parser.add_argument("--session", help="Explicit JSONL transcript; its metadata must match the ID")
     parser.add_argument("--gauge-path", type=Path, help="Explicit installed context-gauge reader path")
+    parser.add_argument("--prepare-percent", type=int, default=POLICY["prepare_fill_percent"],
+                        help="Fill percentage that starts preparing a handoff (default 80)")
+    parser.add_argument("--required-percent", type=int, default=POLICY["required_fill_percent"],
+                        help="Fill percentage that requires a handoff (default 90)")
+    parser.add_argument("--compaction-limit", type=int, default=POLICY["compaction_limit"],
+                        help="Compaction count that requires a handoff (default 2)")
     args = parser.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     except (AttributeError, ValueError):
         pass
-    result = read_policy(args.session_id, args.session, args.gauge_path)
+    try:
+        policy = normalize_policy({"prepare_fill_percent": args.prepare_percent,
+                                   "required_fill_percent": args.required_percent,
+                                   "compaction_limit": args.compaction_limit})
+    except ValueError as exc:
+        print(json.dumps({"schema_version": "1.0", "ok": False, "error": str(exc)},
+                         ensure_ascii=False))
+        return 2
+    result = read_policy(args.session_id, args.session, args.gauge_path, policy=policy)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["ok"] else 2
 

@@ -40,6 +40,8 @@ G0 需求 → G1 文献 → G2 主线与建模冻结 → G3 环境验证 → G4 
 ```
 drl-research-commander/
 ├── SKILL.md                        # 入口：角色表、共同规则、阶段、派发与验收
+├── LICENSE                         # MIT
+├── README.md
 ├── agents/
 │   └── openai.yaml                 # 界面定义（显示名、默认提示、隐式调用策略）
 ├── references/                     # 各角色规范与协议
@@ -49,15 +51,17 @@ drl-research-commander/
 │   ├── executor.md                 #   实验实施规范
 │   ├── reviewer.md                 #   独立审查规范
 │   ├── experiment-protocol.md      #   实验闸门
-│   ├── templates.md                #   项目模板
+│   ├── templates.md                #   项目模板与文件接口
 │   └── context-handoff.md          #   上下文与交接
 ├── scripts/
-│   ├── context_policy.py           # 会话 ID 绑定、80/90 上下文策略
-│   └── project_control.py          # 唯一调度所有权、交接验包、运行登记
+│   ├── context_policy.py           # 会话 ID 绑定、80/90/2 上下文策略
+│   ├── project_control.py          # 唯一调度所有权、交接验包、运行登记
+│   └── record_decision.py          # decisions.jsonl 追加与校验
 ├── tests/
-│   ├── test_context_policy.py      # 上下文策略测试（36 项）
-│   ├── test_project_control.py     # 项目控制测试（55 项）
-│   └── validation.md               # 交付验收记录（91 项通过 + 独立前向验证）
+│   ├── test_context_policy.py      # 上下文策略 + 阈值配置 + reader 兼容性
+│   ├── test_project_control.py     # 项目控制测试
+│   ├── test_record_decision.py     # 决策账本测试
+│   └── validation.md               # 交付验收记录
 └── assets/                         # 论文项目运行时文件模板
     ├── state.md                    #   当前状态
     ├── task.md                     #   角色任务书
@@ -67,11 +71,25 @@ drl-research-commander/
     └── run-record.json             #   运行登记
 ```
 
+## 依赖
+
+- **Python 3.11+**，脚本只用标准库，无需安装第三方包。
+- **`context-gauge` skill（必需）**：`scripts/context_policy.py` 复用它的会话解析来读取真实上下文用量，默认在其**兄弟目录**查找：
+
+  ```
+  <skills>/
+  ├── context-gauge/scripts/context_gauge.py
+  └── drl-research-commander/scripts/context_policy.py
+  ```
+
+  找不到兄弟目录时会回退到 `CODEX_HOME`（默认 `~/.codex`）下的同一相对路径；非标准位置用 `--gauge-path` 显式指定。该 reader 的接口会被校验，缺失或接口变化时脚本明确报错并把轮换动作标为未知，不会静默算出错误的占用率。
+
 ## 安装
 
-将本目录放入 Codex 的 skill 目录（用户级为 `~/.codex/skills/`），使 `SKILL.md` 位于：
+将本仓库放入 Codex 的 skill 目录（用户级为 `~/.codex/skills/`），与 `context-gauge` 并列：
 
 ```
+~/.codex/skills/context-gauge/
 ~/.codex/skills/drl-research-commander/SKILL.md
 ```
 
@@ -89,11 +107,21 @@ drl-research-commander/
 
 ## 测试
 
+在 skill 目录内，或从任意位置用 `-t` 指定顶层目录：
+
 ```powershell
-& <python.exe> -I -B -m unittest discover -s <skill路径>\tests -q
+# 在 skill 目录内
+& $researchPython -I -B -m unittest discover -s tests -q
+
+# 从任意位置（必须用 -t 指定顶层目录，否则会报 "Start directory is not importable"）
+& $researchPython -I -B -m unittest discover -s "<skill路径>\tests" -t "<skill路径>\tests" -q
 ```
 
-共 91 项（上下文策略 36 + 项目控制 55），全部使用临时项目、合成 JSONL 和惰性运行记录，不启动训练或创建聊天。验收与独立前向验证记录见 `tests/validation.md`。
+共 112 项：项目控制、决策账本、阈值配置与 reader 兼容性等测试在有/无 `context-gauge` 时都会运行；36 项上下文策略测试**需要真实 reader**，在新克隆（无 `context-gauge`）时以明确原因 **skip 而不是 fail**，因此 clone 后直接跑仍会得到有效结果（`OK (skipped=36)`），不安装依赖时不会出现假失败。全部使用临时项目、合成 JSONL 和惰性运行记录，不启动训练或创建聊天。验收与独立前向验证记录见 `tests/validation.md`。
+
+## 许可
+
+MIT，见 `LICENSE`。
 
 ## 说明
 
