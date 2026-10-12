@@ -42,6 +42,7 @@ drl-research-commander/
 ├── SKILL.md                        # 入口：角色表、共同规则、阶段、派发与验收
 ├── LICENSE                         # MIT
 ├── README.md
+├── .github/workflows/tests.yml     # CI：Windows + Python 3.11/3.13 跑测试套件
 ├── agents/
 │   └── openai.yaml                 # 界面定义（显示名、默认提示、隐式调用策略）
 ├── references/                     # 各角色规范与协议
@@ -52,21 +53,25 @@ drl-research-commander/
 │   ├── reviewer.md                 #   独立审查规范
 │   ├── experiment-protocol.md      #   实验闸门
 │   ├── templates.md                #   项目模板与文件接口
-│   └── context-handoff.md          #   上下文与交接
+│   ├── context-handoff.md          #   上下文与交接
+│   └── pitfalls.md                 #   常见陷阱与不公平比较清单
 ├── scripts/
 │   ├── context_policy.py           # 会话 ID 绑定、80/90/2 上下文策略
 │   ├── project_control.py          # 唯一调度所有权、交接验包、运行登记
 │   └── record_decision.py          # decisions.jsonl 追加与校验
 ├── tests/
-│   ├── test_context_policy.py      # 上下文策略 + 阈值配置 + reader 兼容性
+│   ├── run_suite.py                # 带“空跑守卫”的测试入口（CI 用）
+│   ├── test_context_policy.py      # 上下文策略 + 阈值配置 + reader 接缝
 │   ├── test_project_control.py     # 项目控制测试
 │   ├── test_record_decision.py     # 决策账本测试
+│   ├── test_skill_assets.py        # 技能文件完整性（链接、JSON、frontmatter）
 │   └── validation.md               # 交付验收记录
 └── assets/                         # 论文项目运行时文件模板
     ├── state.md                    #   当前状态
     ├── task.md                     #   角色任务书
     ├── authorization.md            #   项目授权与来源
     ├── formal-design.md            #   正式设计冻结件
+    ├── paper-claims.md             #   G9 论断—证据表与论文骨架
     ├── handoff-manifest.json       #   交接清单
     └── run-record.json             #   运行登记
 ```
@@ -107,7 +112,13 @@ drl-research-commander/
 
 ## 测试
 
-在 skill 目录内，或从任意位置用 `-t` 指定顶层目录：
+推荐用带守卫的入口（CI 用的就是这个）；它会额外检查"收集到的测试数"和"实际执行数"，避免出现"绿但没跑"：
+
+```powershell
+& $researchPython -I -B tests/run_suite.py
+```
+
+也可以直接用 unittest：
 
 ```powershell
 # 在 skill 目录内
@@ -117,7 +128,13 @@ drl-research-commander/
 & $researchPython -I -B -m unittest discover -s "<skill路径>\tests" -t "<skill路径>\tests" -q
 ```
 
-共 112 项：项目控制、决策账本、阈值配置与 reader 兼容性等测试在有/无 `context-gauge` 时都会运行；36 项上下文策略测试**需要真实 reader**，在新克隆（无 `context-gauge`）时以明确原因 **skip 而不是 fail**，因此 clone 后直接跑仍会得到有效结果（`OK (skipped=36)`），不安装依赖时不会出现假失败。全部使用临时项目、合成 JSONL 和惰性运行记录，不启动训练或创建聊天。验收与独立前向验证记录见 `tests/validation.md`。
+共 125 项：项目控制、决策账本、阈值配置、reader 接缝与技能文件完整性等测试在有/无 `context-gauge` 时都会运行；36 项上下文策略测试**需要真实 reader**，在新克隆（无 `context-gauge`）时以明确原因 **skip 而不是 fail**，因此 clone 后直接跑仍会得到有效结果（`OK (skipped=36)`），不安装依赖时不会出现假失败。全部使用临时项目、合成 JSONL 和惰性运行记录，不启动训练或创建聊天。验收与独立前向验证记录见 `tests/validation.md`。
+
+CI（`.github/workflows/tests.yml`）在 `windows-latest` 上用 Python 3.11 与 3.13 各跑一次；这两个版本已在开发机实测通过。
+
+## 常见陷阱
+
+`references/pitfalls.md` 汇总了信息泄漏、可行性处理越界、不公平比较、环境迎合，以及 Lyapunov/虚拟队列、储能与碳强度、评价统计、可复现等方面的常见陷阱，每条给出"现象 → 为什么是问题 → 可复核动作"。主帅在冻结比较设计（G2/G6）与派发独立审查（G8）前用它自查，审查者用它做审查索引。
 
 ## 许可
 

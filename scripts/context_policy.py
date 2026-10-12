@@ -211,9 +211,13 @@ def read_policy(session_id, session=None, gauge_path=None, now=None, policy=None
         return report
 
     # The installed reader prefilters by strings, so feed it only canonical
-    # structural telemetry from this single read. This is an isolated imported
-    # module, not a change to its file or a global builtins patch. No temporary
-    # transcript is written, and user-message text cannot masquerade as events.
+    # structural telemetry from this single read. The reader resolves its file
+    # access through the module-level `open`, so that name is shadowed for this
+    # one call and restored in `finally`; no temporary transcript is written and
+    # user-message text cannot masquerade as events. If the reader stops routing
+    # through module-level `open`, the injected telemetry would be silently
+    # ignored, so that case is detected and reported as unknown instead of
+    # trusting numbers read from the raw file.
     events = "".join(audit["reader_events"])
     if audit["model"] is None:
         # The shared reader retains historical identity for a model-less turn.
@@ -225,12 +229,32 @@ def read_policy(session_id, session=None, gauge_path=None, now=None, policy=None
                                   "payload": {"type": "token_count", "info": {
                                       "last_token_usage": {"input_tokens": audit["used"]},
                                       "model_context_window": audit["window"]}}}) + "\n"
-    gauge.open = lambda *args, **kwargs: io.StringIO(events)
+    opened = []
+
+    def reader_open(*args, **kwargs):
+        opened.append(True)
+        return io.StringIO(events)
+
+    sentinel = object()
+    previous_open = getattr(gauge, "open", sentinel)
+    gauge.open = reader_open
     try:
         state = gauge.scan_session(path)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         report["rotation"]["reasons"] = ["reader_unavailable"]
         report["error"] = str(exc)
+        return report
+    finally:
+        if previous_open is sentinel:
+            try:
+                del gauge.open
+            except AttributeError:
+                pass
+        else:
+            gauge.open = previous_open
+    if not opened:
+        report["snapshot_status"] = "reader_mismatch"
+        report["rotation"]["reasons"] = ["reader_ignored_structured_telemetry"]
         return report
 
     report.update(ok=True, binding_verified=True, session_id=session_id,

@@ -542,5 +542,108 @@ class PolicyConfigurationTests(unittest.TestCase):
         policy.check_gauge_interface(Reader)  # must not raise
 
 
+FAKE_READER_HEADER = '''
+SESSION = %(session)r
+MODEL = %(model)r
+USED = %(used)d
+WINDOW = %(window)d
+USAGE_TS = %(usage_ts)r
+OBSERVE_PATH = %(observe)r
+
+from pathlib import Path
+
+STATE = {"ok": True, "session_id": SESSION, "model": MODEL, "compactions": 0,
+         "used": USED, "window": WINDOW, "window_source": "codex", "usage_ts": USAGE_TS}
+
+
+def find_session(session_id=None, path=None, prefer_recent=True):
+    return path
+
+'''
+
+FAKE_READER_OPENS = '''
+def scan_session(path, max_history=40):
+    with open(path, encoding="utf-8") as stream:
+        stream.read()
+    return dict(STATE)
+
+
+def snapshot_status(st, now=None):
+    Path(OBSERVE_PATH).write_text(
+        "shadowed" if "open" in globals() else "restored", encoding="utf-8")
+    return {"snapshot_status": "latest_report"}
+'''
+
+FAKE_READER_IGNORES_OPEN = '''
+def scan_session(path, max_history=40):
+    return dict(STATE)
+
+
+def snapshot_status(st, now=None):
+    return {"snapshot_status": "latest_report"}
+'''
+
+
+class ReaderAdapterTests(unittest.TestCase):
+    """The in-memory hand-off to the installed reader, using substitute readers.
+
+    A substitute reader keeps these checks runnable without the real sibling
+    skill, and pins the seam that the real reader is expected to satisfy.
+    """
+
+    SESSION = "synthetic-reader"
+    MODEL = "gpt-6.1-sol"
+    USED = 800_000
+    WINDOW = 1_000_000
+    USAGE_TS = "2026-10-12T07:00:02+00:00"
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="drl-reader-test-")
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name).resolve()
+        self.transcript = self.base / ("rollout-" + self.SESSION + ".jsonl")
+        self.transcript.write_text("\n".join(json.dumps(row) for row in [
+            event("session_meta", {"id": self.SESSION}, "2026-10-12T07:00:00+00:00"),
+            event("turn_context", {"model": self.MODEL}, "2026-10-12T07:00:01+00:00"),
+            token_event(self.USED, self.WINDOW, self.USAGE_TS)]) + "\n", encoding="utf-8")
+        self.observed = self.base / "observed.txt"
+
+    def reader(self, body):
+        path = self.base / "substitute_gauge.py"
+        path.write_text(FAKE_READER_HEADER % {"session": self.SESSION, "model": self.MODEL,
+                                              "used": self.USED, "window": self.WINDOW,
+                                              "usage_ts": self.USAGE_TS,
+                                              "observe": str(self.observed)} + body,
+                        encoding="utf-8")
+        return str(path)
+
+    def test_structured_telemetry_drives_the_decision(self):
+        report = policy.read_policy(self.SESSION, str(self.transcript),
+                                    gauge_path=self.reader(FAKE_READER_OPENS), now=NOW)
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["fill_percent"], 80)
+        self.assertEqual(report["rotation"]["action"], "prepare")
+
+    def test_module_level_open_is_restored_after_the_call(self):
+        policy.read_policy(self.SESSION, str(self.transcript),
+                           gauge_path=self.reader(FAKE_READER_OPENS), now=NOW)
+        self.assertEqual(self.observed.read_text(encoding="utf-8"), "restored")
+
+    def test_reader_that_ignores_structured_telemetry_is_not_trusted(self):
+        report = policy.read_policy(self.SESSION, str(self.transcript),
+                                    gauge_path=self.reader(FAKE_READER_IGNORES_OPEN), now=NOW)
+        self.assertFalse(report["ok"], report)
+        self.assertIsNone(report["fill_percent"])
+        self.assertEqual(report["rotation"]["action"], "unknown")
+        self.assertIn("reader_ignored_structured_telemetry", report["rotation"]["reasons"])
+        self.assertFalse(self.observed.exists())
+
+    def test_substitute_reader_missing_a_used_keyword_is_refused(self):
+        report = policy.read_policy(self.SESSION, str(self.transcript),
+                                    gauge_path=self.reader(""), now=NOW)
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["rotation"]["reasons"], ["reader_unavailable"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

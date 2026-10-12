@@ -25,6 +25,7 @@
 - [授权记录](../assets/authorization.md)：准确保留用户直接指令的范围与来源，不能用助手自己写的“已授权”代替原指令。
 - [运行记录](../assets/run-record.json)：在每次启动前生成具体记录，含配置、代码/环境版本、种子、命令、预算与指标位置。
 - [正式实验冻结单](../assets/formal-design.md)：在 G6 锁定比较方法、参数、信息、种子、评估与统计。
+- [G9 论断—证据表](../assets/paper-claims.md)：G9 的论断—证据对应、图表追溯、限制与审查处理记录。
 - [交接清单](../assets/handoff-manifest.json)：原子接管的输入，详见下文。
 
 决策账本每行一个 JSON 对象：`id`、`timestamp`、`stage`、`spec_version`、`decision`、`reason`、`evidence`（绝对路径/原文位置）、`affected_runs`、`revalidation`。否决方案也登记，避免轮换后重新尝试同一条无依据的路径。

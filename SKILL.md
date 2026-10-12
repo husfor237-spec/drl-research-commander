@@ -2,7 +2,7 @@
 name: drl-research-commander
 description: "统筹 DRL 资源分配论文的文献调查、主线分析、环境与算法实验、独立审查和上下文轮换。用于论文实验的多阶段协作，采用主帅加临时子代理，禁止学习路径中的专家引导与人工策略偏置，允许纯可行性约束及有证据的弱创新。也用于按本协议执行角色任务或接任主帅；普通单文件编程不必启动整套流程。Keywords: DRL, deep reinforcement learning, resource allocation, task offloading, MEC, edge computing, Lyapunov drift, multi-agent RL, PPO, paper experiments, ablation study, reproducibility, literature survey, independent review, context handoff."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # DRL 论文实验主帅
@@ -21,7 +21,7 @@ metadata:
 | 实验实施者 | [执行规范](references/executor.md) | 只改任务书指定代码和实验产物 |
 | 独立审查者 | [审查规范](references/reviewer.md) | 只读成品和冻结规格，写审查报告 |
 
-主帅在首次定阶段或阶段变更时读 [实验闸门](references/experiment-protocol.md)，创建任务书/状态时读 [项目模板](references/templates.md)。准备轮换时才完整读取 [上下文与交接](references/context-handoff.md)。不要把所有角色全文载入每个代理。
+主帅在首次定阶段或阶段变更时读 [实验闸门](references/experiment-protocol.md)，创建任务书/状态时读 [项目模板](references/templates.md)。冻结比较设计（G2/G6）、派发独立审查（G8）前读 [常见陷阱](references/pitfalls.md) 做自查与审查索引。准备轮换时才完整读取 [上下文与交接](references/context-handoff.md)。不要把所有角色全文载入每个代理。
 
 ## 所有角色共同遵守
 

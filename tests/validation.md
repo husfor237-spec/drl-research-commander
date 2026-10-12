@@ -60,3 +60,27 @@
 CLI 冒烟：非法阈值（prepare ≥ required）返回退出码 2 且不写文件；自定义阈值原样出现在 `policy` 字段；决策账本端到端追加一条合法记录，`--check-only` 校验通过。
 
 验证范围仍同 1.0.0：未执行真实聊天创建/跨聊天激活、真实子代理会话绑定或训练恢复；没有开展真实论文实验，不把本记录当作论文结果。
+
+## 修订 1.2.0（同日）
+
+改动范围：
+
+- 新增 `references/pitfalls.md`：常见陷阱与不公平比较清单（信息泄漏、可行性处理越界、不公平比较、环境迎合，以及 Lyapunov/虚拟队列、储能与碳强度、评价统计、可复现），并在 `SKILL.md` 与 `experiment-protocol.md` 中接入（G2/G6 冻结前、G8 派发前使用）。
+- 新增 `assets/paper-claims.md`：G9 论断—证据对应表、图表追溯、限制与审查处理记录，并在 `templates.md` 的可复制模板中登记。
+- `scripts/context_policy.py`：读取器接缝重构——模块级 `open` 的替换改为 `try/finally` 显式恢复；新增"注入未被使用"检测，读取器不再经由模块级 `open` 取数时判为 `reader_mismatch` 并标未知，不再可能采信原始文件的数字。
+- 新增 `tests/test_skill_assets.py`：技能文件完整性（相对链接可解析、JSON 模板可解析、frontmatter 有 name 与语义化版本、文档引用的脚本存在、外部依赖脚本未被内置）。
+- 新增 `tests/run_suite.py`：带空跑守卫的测试入口（收集数与实际执行数下限），Discovery 失败时给出明确失败而非堆栈。
+- 新增 `.github/workflows/tests.yml`：`windows-latest` 上 Python 3.11 与 3.13 各跑一次 `tests/run_suite.py`。
+
+实测：
+
+| 环境 | 结果 |
+|---|---|
+| 仓库副本，Python 3.13 | `run_suite.py`：collected=125 executed=89 skipped=36 failures=0 errors=0，退出码 0 |
+| 仓库副本，Python 3.11.9 | 同上（125/89/36，0 失败） |
+| 空目录（守卫自检） | collected=0 → 明确报"低于下限"，退出码 1（证明守卫非空转） |
+| 安装位置（有兄弟 reader） | `run_suite.py`：collected=125 executed=125 skipped=0 failures=0 errors=0，退出码 0 |
+
+读取器接缝由 4 项替身 reader 测试固定：结构化遥测驱动决策、调用后模块级 `open` 已恢复、忽略注入的 reader 不被采信（`reader_ignored_structured_telemetry`）、接口缺关键字即拒绝。
+
+未执行项同 1.1.0；CI 尚未在 GitHub 上真实跑过，仅按本机同版本（3.11.9 / 3.13.12，Windows）实测推断通过。
